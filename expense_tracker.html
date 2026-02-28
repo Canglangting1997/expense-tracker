@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Expense Tracker</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding-bottom: 80px; }
+        
+        .header { background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%); color: white; padding: 20px; text-align: center; }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        
+        .tabs { display: flex; background: white; border-bottom: 1px solid #eee; position: sticky; top: 0; }
+        .tab { flex: 1; padding: 15px; text-align: center; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab.active { border-bottom-color: #007AFF; color: #007AFF; font-weight: bold; }
+        
+        .page { display: none; padding: 20px; }
+        .page.active { display: block; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #666; font-size: 14px; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+        
+        .btn { width: 100%; padding: 14px; background: #007AFF; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .btn:active { opacity: 0.8; }
+        .btn-secondary { background: #8E8E93; margin-top: 10px; }
+        
+        .record { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .record-info { flex: 1; }
+        .record-date { font-size: 12px; color: #999; }
+        .record-category { font-weight: bold; margin: 3px 0; }
+        .record-note { font-size: 12px; color: #666; }
+        .record-amount { font-size: 18px; font-weight: bold; }
+        .record-amount.Canada { color: #e74c3c; }
+        .record-amount.USA { color: #27ae60; }
+        
+        .delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; margin-left: 10px; font-size: 12px; }
+        
+        .summary { background: white; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
+        .summary h3 { margin-bottom: 15px; color: #333; }
+        .summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .summary-row:last-child { border-bottom: none; }
+        .summary-total { font-weight: 600; font-size: 18px; color: #007AFF; }
+        
+        .month-select { display: flex; gap: 10px; margin-bottom: 15px; }
+        .month-select select { flex: 1; }
+        
+        .export-btns { display: flex; gap: 10px; margin-top: 20px; }
+        .export-btns .btn { flex: 1; }
+        
+        .detail-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .detail-modal.active { display: flex; align-items: center; justify-content: center; }
+        .detail-content { background: white; width: 90%; max-width: 400px; max-height: 80vh; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+        .detail-header { background: #007AFF; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .detail-header h3 { font-size: 16px; }
+        .detail-close { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+        .detail-body { padding: 15px; overflow-y: auto; flex: 1; }
+        .detail-item { padding: 12px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        .detail-item:last-child { border-bottom: none; }
+        .detail-date { font-size: 12px; color: #999; }
+        .detail-note { font-size: 12px; color: #666; margin-top: 2px; }
+        .clickable { cursor: pointer; background: #f8f8f8; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+        .clickable:hover { background: #e8e8e8; }
+        .clickable:active { background: #ddd; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💰 Expense Tracker</h1>
+    </div>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="showPage('add')">Add</div>
+        <div class="tab" onclick="showPage('records')">Records</div>
+        <div class="tab" onclick="showPage('report')">Report</div>
+    </div>
+    
+    <!-- 记一笔 -->
+    <div id="add" class="page active">
+        <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>Amount</label>
+            <input type="number" id="amount" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Country</label>
+            <div style="display:flex;gap:8px;">
+                <select id="currency">
+                    <option value="USA">🇺🇸 美国 (USD)</option>
+                    <option value="Canada">🇨🇦 加拿大 (CAD)</option>
+                    <option value="China">🇨🇳 中国 (CNY)</option>
+                    <option value="Europe">🇪🇺 欧洲 (EUR)</option>
+                </select>
+                <button type="button" onclick="detectLocationAndSetCurrency()" style="padding:12px;background:#34C759;color:white;border:none;border-radius:8px;font-size:14px;" title="根据位置自动选择">📍</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>分类</label>
+            <select id="category">
+                <option value="grocery">🛒 Grocery</option>
+                <option value="car">🚗 Car</option>
+                <option value="food">🍔 Food</option>
+                <option value="family">👨‍👩‍👧 Family</option>
+                <option value="others">📦 Others</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Note (optional)</label>
+            <input type="text" id="note" placeholder="Note">
+        </div>
+        <div class="form-group">
+            <label>Address (optional)</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="address" placeholder="Address">
+                <button type="button" onclick="getLocation()" style="padding: 12px; background: #007AFF; color: white; border: none; border-radius: 8px; font-size: 14px;">📍</button>
+            </div>
+        </div>
+        <button class="btn" onclick="addRecord()">Save</button>
+    </div>
+    
+    <!-- 记录 -->
+    <div id="records" class="page">
+        <div id="recordsList"></div>
+    </div>
+    
+    <!-- 报表 -->
+    <div id="report" class="page">
+        <div class="month-select">
+            <select id="reportMonth" onchange="generateReport()"></select>
+            <select id="reportYear" onchange="generateReport()"></select>
+        </div>
+        <div id="reportContent"></div>
+        <button class="btn" style="margin-top:15px;background:#34C759;" onclick="showMonthlySummary()">📅 Monthly Summary</button>
+        <div class="export-btns">
+            <button class="btn" onclick="exportData()">Export CSV</button>
+            <button class="btn" onclick="importData()" style="background:#FF9500;">Import CSV</button>
+            <button class="btn btn-secondary" onclick="clearData()">Clear All</button>
+        </div>
+    </div>
+
+    <!-- 明细弹窗 -->
+    <div id="detailModal" class="detail-modal">
+        <div class="detail-content">
+            <div class="detail-header">
+                <h3 id="detailTitle">Details</h3>
+                <button class="detail-close" onclick="closeDetail()">×</button>
+            </div>
+            <div id="detailBody" class="detail-body"></div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化
+        document.getElementById('date').valueAsDate = new Date();
+        
+        // 根据位置自动选择货币和显示地名
+        function detectLocationAndSetCurrency() {
+            if (!navigator.geolocation) return;
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lon = position.coords.longitude;
+                    const lat = position.coords.latitude;
+                    
+                    // 美国范围判断
+                    const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
+                    
+                    // 获取地名并选择货币
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`)
+                        .then(response => response.json())
+                        .then(data => {
+                            let locationName = '';
+                            let currency = 'Canada'; // 默认
+                            
+                            if (data.address) {
+                                // 获取地名
+                                if (data.address.landmark) locationName = data.address.landmark;
+                                else if (data.address.poi) locationName = data.address.poi;
+                                else if (data.address.road) locationName = data.address.road;
+                                else if (data.address.city) locationName = data.address.city;
+                                else if (data.address.town) locationName = data.address.town;
+                                else if (data.address.village) locationName = data.address.village;
+                                else locationName = data.display_name ? data.display_name.split(',').slice(0, 2).join(',') : '';
+                            
+                                // 根据所在国家选择货币
+                                const countryCode = data.address.country_code?.toUpperCase();
+                                
+                                if (countryCode === 'US' || isUSA) {
+                                    currency = 'USA';
+                                } else if (countryCode === 'CA') {
+                                    currency = 'Canada';
+                                } else if (countryCode === 'CN') {
+                                    currency = 'China';
+                                } else if (countryCode && ['DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'GR', 'IE', 'FI', 'SE', 'DK', 'PL', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SK', 'SI', 'EE', 'LV', 'LT', 'LU', 'CY', 'MT'].includes(countryCode)) {
+                                    currency = 'Europe';
+                                }
+                            }
+                            
+                            // 设置货币
+                            document.getElementById('currency').value = currency;
+                            
+                            // 显示位置名称（可选）
+                            if (locationName && locationName.length > 2) {
+                                console.log('Current location:', locationName, 'Currency:', currency);
+                            }
+                        })
+                        .catch(err => {
+                            // 如果获取地名失败，根据坐标简单判断
+                            document.getElementById('currency').value = isUSA ? 'USA' : 'Canada';
+                            console.log('Geocoding error:', err);
+                        });
+                },
+                (error) => {
+                    console.log('Location error:', error.message);
+                }
+            );
+        }
+        
+        // 页面加载时检测位置
+        detectLocationAndSetCurrency();
+        
+        // 初始化月份选择
+        const now = new Date();
+        const monthSelect = document.getElementById('reportMonth');
+        const yearSelect = document.getElementById('reportYear');
+        
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const option = document.createElement('option');
+            option.value = d.getMonth();
+            option.text = (d.getMonth() + 1) + '月';
+            if (i === 0) option.selected = true;
+            monthSelect.appendChild(option);
+        }
+        
+        for (let y = now.getFullYear(); y >= now.getFullYear() - 2; y--) {
+            const option = document.createElement('option');
+            option.value = y;
+            option.text = y + '年';
+            if (y === now.getFullYear()) option.selected = true;
+            yearSelect.appendChild(option);
+        }
+        
+        // 获取数据
+        function getRecords() {
+            return JSON.parse(localStorage.getItem('expenseRecords') || '[]');
+        }
+        
+        // 保存数据
+        function saveRecords(records) {
+            localStorage.setItem('expenseRecords', JSON.stringify(records));
+        }
+        
+        // 添加记录
+        function addRecord() {
+            const date = document.getElementById('date').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const currency = document.getElementById('currency').value;
+            const category = document.getElementById('category').value;
+            const note = document.getElementById('note').value;
+            const address = document.getElementById('address').value;
+            
+            if (!date || !amount) {
+                alert('Please fill in date and amount');
+                return;
+            }
+            
+            const records = getRecords();
+            records.push({ date, amount, currency, category, note, address, id: Date.now() });
+            saveRecords(records);
+            
+            // 重置表单
+            document.getElementById('amount').value = '';
+            document.getElementById('note').value = '';
+            document.getElementById('address').value = '';
+            document.getElementById('date').valueAsDate = new Date();
+            
+            alert('Saved!');
+            showPage('records');
+        }
+        
+        // 获取当前位置（使用逆地理编码显示地名）
+        function getLocation() {
+            if (!navigator.geolocation) {
+                alert('Location not supported');
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    // 使用 Nominatim API 进行逆地理编码（免费，无需 API key）
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // 尝试获取最有意义的地址名称
+                            let address = '';
+                            if (data.address) {
+                                // 优先使用 poi, landmark, 或 landmark
+                                if (data.address.landmark) {
+                                    address = data.address.landmark;
+                                } else if (data.address.poi) {
+                                    address = data.address.poi;
+                                } else if (data.address.road) {
+                                    // 使用路名 + 城市
+                                    address = data.address.road;
+                                    if (data.address.city) address += ', ' + data.address.city;
+                                    else if (data.address.town) address += ', ' + data.address.town;
+                                    else if (data.address.village) address += ', ' + data.address.village;
+                                } else if (data.address.city) {
+                                    address = data.address.city;
+                                } else if (data.address.town) {
+                                    address = data.address.town;
+                                } else {
+                                    address = data.display_name ? data.display_name.split(',').slice(0, 2).join(',') : '';
+                                }
+                            }
+                            
+                            // 如果没有获取到地址，使用坐标
+                            if (!address || address.length < 2) {
+                                address = lat.toFixed(4) + ', ' + lon.toFixed(4);
+                            }
+                            
+                            document.getElementById('address').value = address;
+                        })
+                        .catch(err => {
+                            // 如果 API 失败，使用坐标
+                            const addr = lat.toFixed(4) + ', ' + lon.toFixed(4);
+                            document.getElementById('address').value = addr;
+                        });
+                },
+                (error) => {
+                    alert('Unable to get location: ' + error.message);
+                }
+            );
+        }
+        
+        // 显示记录
+        function getCategoryIcon(category) {
+            const icons = {
+                'grocery': '🛒',
+                'car': '🚗',
+                'food': '🍔',
+                'family': '👨‍👩‍👧',
+                'others': '📦'
+            };
+            return icons[category] || '📦';
+        }
+        
+        function showRecords() {
+            const records = getRecords().sort((a, b) => new Date(b.date) - new Date(a.date));
+            const container = document.getElementById('recordsList');
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="empty">No records</div>';
+                return;
+            }
+            
+            container.innerHTML = records.map(r => `
+                <div class="record">
+                    <div class="record-info">
+                        <div class="record-date">${r.date} · ${getCurrencyFlag(r.currency)} ${r.address ? ' 📍 ' + r.address : ''}</div>
+                        <div class="record-category">${getCategoryIcon(r.category)} ${r.category}</div>
+                        <div class="record-note">${r.note || ''}</div>
+                    </div>
+                    <div class="record-amount ${r.currency}">${getCurrencySymbol(r.currency)}${r.amount.toFixed(2)}</div>
+                    <button class="delete-btn" onclick="deleteRecord(${r.id})">Delete</button>
+                </div>
+            `).join('');
+        }
+        
+        // 获取货币符号
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                'USA': '$',
+                'Canada': 'C$',
+                'China': '¥',
+                'Europe': '€'
+            };
+            return symbols[currency] || '$';
+        }
+        
+        // 获取货币旗帜
+        function getCurrencyFlag(currency) {
+            const flags = {
+                'USA': '🇺🇸',
+                'Canada': '🇨🇦',
+                'China': '🇨🇳',
+                'Europe': '🇪🇺'
+            };
+            return flags[currency] || '💰';
+        }
+        
+        // 删除记录
+        function deleteRecord(id) {
+            if (!confirm('Delete this record?')) return;
+            const records = getRecords().filter(r => r.id !== id);
+            saveRecords(records);
+            showRecords();
+        }
+        
+        // 生成报表
+        function generateReport() {
+            const month = parseInt(document.getElementById('reportMonth').value);
+            const year = parseInt(document.getElementById('reportYear').value);
+            
+            const records = getRecords().filter(r => {
+                const d = new Date(r.date);
+                return d.getMonth() === month && d.getFullYear() === year;
+            });
+            
+            if (records.length === 0) {
+                document.getElementById('reportContent').innerHTML = '<div class="empty">No records for this month</div>';
+                return;
+            }
+            
+            // 按国家汇总（原始货币）
+            const byCountry = {};
+            // 按分类汇总（转换为加元）
+            const byCategory = {};
+            // 分别统计 CAD, USD, CNY, EUR
+            let cadTotal = 0;
+            let usdTotal = 0;
+            let cnyTotal = 0;
+            let eurTotal = 0;
+            // 汇率转换为 CAD
+            const rates = { 'USA': 1.35, 'Canada': 1, 'China': 0.19, 'Europe': 1.45 };
+            let total = 0;
+            
+            records.forEach(r => {
+                const rate = rates[r.currency] || 1;
+                const cadAmount = r.amount * rate;
+                
+                // 原始货币统计
+                byCountry[r.currency] = (byCountry[r.currency] || 0) + r.amount;
+                
+                // 分类统计（加元）
+                byCategory[r.category] = (byCategory[r.category] || 0) + cadAmount;
+                
+                // 分别统计
+                if (r.currency === 'Canada') {
+                    cadTotal += r.amount;
+                } else if (r.currency === 'USA') {
+                    usdTotal += r.amount;
+                } else if (r.currency === 'China') {
+                    cnyTotal += r.amount;
+                } else if (r.currency === 'Europe') {
+                    eurTotal += r.amount;
+                }
+                total += cadAmount;
+            });
+            
+            // 本月汇总（按分类 + 货币分开）
+            let html = '<div class="summary" style="background:#fff3cd;"><h3>📅 本月汇总</h3>';
+            
+            // 按分类显示（加元）
+            html += '<div style="margin-bottom:10px;"><strong>按分类 (CAD):</strong></div>';
+            for (const [cat, amount] of Object.entries(byCategory)) {
+                html += `<div class="summary-row"><span>${getCategoryIcon(cat)} ${cat}</span><span>C$${amount.toFixed(2)}</span></div>`;
+            }
+            
+            // 货币分开显示
+            html += '<div style="margin:15px 0 10px 0;border-top:1px solid #eee;padding-top:10px;"><strong>按货币:</strong></div>';
+            if (cadTotal > 0) html += `<div class="summary-row"><span>🇨🇦 CAD</span><span>C$${cadTotal.toFixed(2)}</span></div>`;
+            if (usdTotal > 0) html += `<div class="summary-row"><span>🇺🇸 USD</span><span>$${usdTotal.toFixed(2)}</span></div>`;
+            if (cnyTotal > 0) html += `<div class="summary-row"><span>🇨🇳 CNY</span><span>¥${cnyTotal.toFixed(2)}</span></div>`;
+            if (eurTotal > 0) html += `<div class="summary-row"><span>🇪🇺 EUR</span><span>€${eurTotal.toFixed(2)}</span></div>`;
+            html += `<div class="summary-row" style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;"><span>💰 总计 (CAD)</span><span class="summary-total">C$${total.toFixed(2)}</span></div>`;
+            html += '</div>';
+            
+            // By Country
+            html += '<div class="summary"><h3>📊 By Country</h3>';
+            for (const [country, amount] of Object.entries(byCountry)) {
+                const symbol = getCurrencySymbol(country);
+                const flag = getCurrencyFlag(country);
+                html += `<div class="clickable" onclick="showCountryDetail('${country}')"><div class="summary-row"><span>${flag} ${country}</span><span>${symbol}${amount.toFixed(2)}</span></div></div>`;
+            }
+            html += '</div>';
+            
+            // By Category (in CAD)
+            html += '<div class="summary"><h3>📁 By Category (CAD)</h3>';
+            for (const [cat, amount] of Object.entries(byCategory)) {
+                html += `<div class="clickable" onclick="showCategoryDetail('${cat}')"><div class="summary-row"><span>${getCategoryIcon(cat)} ${cat}</span><span>C$${amount.toFixed(2)}</span></div></div>`;
+            }
+            html += '</div>';
+            
+            document.getElementById('reportContent').innerHTML = html;
+        }
+        
+        // 显示每月汇总
+        function showMonthlySummary() {
+            const records = getRecords();
+            
+            if (records.length === 0) {
+                document.getElementById('reportContent').innerHTML = '<div class="empty">No records</div>';
+                return;
+            }
+            
+            // 汇率转换为 CAD
+            const rates = { 'USA': 1.35, 'Canada': 1, 'China': 0.19, 'Europe': 1.45 };
+            
+            // 按月份汇总
+            const monthlyData = {};
+            
+            records.forEach(r => {
+                const d = new Date(r.date);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const monthName = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+                
+                const rate = rates[r.currency] || 1;
+                const cadAmount = r.amount * rate;
+                
+                if (!monthlyData[key]) {
+                    monthlyData[key] = { name: monthName, total: 0, count: 0 };
+                }
+                monthlyData[key].total += cadAmount;
+                monthlyData[key].count += 1;
+            });
+            
+            // 按时间排序（最新的月份在前）
+            const sortedKeys = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a));
+            
+            let html = '<div class="summary"><h3>📅 Monthly Summary</h3>';
+            let grandTotal = 0;
+            
+            for (const key of sortedKeys) {
+                const data = monthlyData[key];
+                grandTotal += data.total;
+                html += `
+                    <div class="clickable" onclick="showMonthDetail('${key}')">
+                        <div class="summary-row">
+                            <span>${data.name} (${data.count}笔)</span>
+                            <span style="font-weight:bold;">C$${data.total.toFixed(2)}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            html += `<div class="summary"><div class="summary-row"><span>Grand Total</span><span class="summary-total">C$${grandTotal.toFixed(2)}</span></div></div>`;
+            
+            document.getElementById('reportContent').innerHTML = html;
+        }
+        
+        // 显示某月的所有记录
+        function showMonthDetail(key) {
+            const [year, month] = key.split('-').map(Number);
+            
+            const records = getRecords().filter(r => {
+                const d = new Date(r.date);
+                return d.getMonth() === month - 1 && d.getFullYear() === year;
+            }).sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            if (records.length === 0) {
+                alert('No records');
+                return;
+            }
+            
+            const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+            const monthName = `${year}年${monthNames[month - 1]}`;
+            
+            let html = records.map(r => {
+                const symbol = getCurrencySymbol(r.currency);
+                const flag = getCurrencyFlag(r.currency);
+                return `
+                    <div class="detail-item">
+                        <div>
+                            <div class="detail-date">${r.date} · ${flag} ${getCategoryIcon(r.category)} ${r.category}</div>
+                            <div class="detail-note">${r.note || r.address || ''}</div>
+                        </div>
+                        <div style="font-weight: bold;">${symbol}${r.amount.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('detailTitle').textContent = '📅 ' + monthName;
+            document.getElementById('detailBody').innerHTML = html;
+            document.getElementById('detailModal').classList.add('active');
+        }
+
+        // 显示国家明细
+        function showCountryDetail(country) {
+            const month = parseInt(document.getElementById('reportMonth').value);
+            const year = parseInt(document.getElementById('reportYear').value);
+            
+            const records = getRecords().filter(r => {
+                const d = new Date(r.date);
+                return d.getMonth() === month && d.getFullYear() === year && r.currency === country;
+            }).sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            if (records.length === 0) {
+                alert('No records');
+                return;
+            }
+            
+            const symbol = getCurrencySymbol(country);
+            let html = records.map(r => `
+                <div class="detail-item">
+                    <div>
+                        <div class="detail-date">${r.date} · ${getCategoryIcon(r.category)} ${r.category}</div>
+                        <div class="detail-note">${r.note || r.address || ''}</div>
+                    </div>
+                    <div style="font-weight: bold;">${symbol}${r.amount.toFixed(2)}</div>
+                </div>
+            `).join('');
+            
+            const countryFlag = getCurrencyFlag(country);
+            document.getElementById('detailTitle').textContent = '📊 ' + countryFlag + ' ' + country;
+            document.getElementById('detailBody').innerHTML = html;
+            document.getElementById('detailModal').classList.add('active');
+        }
+        
+        // 显示分类明细
+        function showCategoryDetail(category) {
+            const month = parseInt(document.getElementById('reportMonth').value);
+            const year = parseInt(document.getElementById('reportYear').value);
+            
+            const records = getRecords().filter(r => {
+                const d = new Date(r.date);
+                return d.getMonth() === month && d.getFullYear() === year && r.category === category;
+            }).sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            if (records.length === 0) {
+                alert('No records');
+                return;
+            }
+            
+            let html = records.map(r => {
+                const symbol = getCurrencySymbol(r.currency);
+                const flag = getCurrencyFlag(r.currency);
+                return `
+                    <div class="detail-item">
+                        <div>
+                            <div class="detail-date">${r.date} · ${flag} ${r.category}</div>
+                            <div class="detail-note">${r.note || r.address || ''}</div>
+                        </div>
+                        <div style="font-weight: bold;">${symbol}${r.amount.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('detailTitle').textContent = '📁 ' + getCategoryIcon(category) + ' ' + category;
+            document.getElementById('detailBody').innerHTML = html;
+            document.getElementById('detailModal').classList.add('active');
+        }
+        
+        // 关闭明细弹窗
+        function closeDetail() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+        
+        // 点击弹窗外部关闭
+        document.getElementById('detailModal').addEventListener('click', function(e) {
+            if (e.target === this) closeDetail();
+        });
+        
+        // 导出数据
+        function exportData() {
+            const records = getRecords();
+            if (records.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            
+            let csv = '日期,金额,货币,分类,备注\n';
+            records.forEach(r => {
+                csv += `${r.date},${r.amount},${r.currency},${r.category},${r.note || ''}\n`;
+            });
+            
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+        
+        // 导入数据
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const text = event.target.result;
+                    const lines = text.split('\n');
+                    
+                    let imported = 0;
+                    lines.forEach((line, index) => {
+                        if (index === 0) return; // 跳过表头
+                        const parts = line.split(',');
+                        if (parts.length >= 4) {
+                            const record = {
+                                date: parts[0].trim(),
+                                amount: parseFloat(parts[1]) || 0,
+                                currency: parts[2].trim(),
+                                category: parts[3].trim(),
+                                note: parts[4] ? parts[4].trim() : '',
+                                id: Date.now() + index
+                            };
+                            if (record.date && record.amount > 0) {
+                                const records = getRecords();
+                                records.push(record);
+                                saveRecords(records);
+                                imported++;
+                            }
+                        }
+                    });
+                    
+                    alert(`成功导入 ${imported} 条记录！`);
+                    showRecords();
+                    generateReport();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        
+        // 清空数据
+        function clearData() {
+            if (!confirm('Clear ALL data? This cannot be undone!')) return;
+            localStorage.removeItem('expenseRecords');
+            alert('All data cleared');
+            showRecords();
+            generateReport();
+        }
+        
+        // 切换页面
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById(pageId).classList.add('active');
+            document.querySelectorAll('.tab')[pageId === 'add' ? 0 : pageId === 'records' ? 1 : 2].classList.add('active');
+            
+            if (pageId === 'records') showRecords();
+            if (pageId === 'report') generateReport();
+        }
+    </script>
+</body>
+</html>
