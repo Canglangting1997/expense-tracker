@@ -84,14 +84,16 @@
         </div>
         <div class="form-group">
             <label>Amount</label>
-            <input type="number" id="amount" placeholder="0.00" step="0.01" inputmode="decimal“>
+            <input type="number" id="amount" placeholder="0.00" step="0.01">
         </div>
         <div class="form-group">
             <label>Country</label>
             <div style="display:flex;gap:8px;">
                 <select id="currency">
-                    <option value="Canada">🇨🇦 加拿大 (CAD)</option>
                     <option value="USA">🇺🇸 美国 (USD)</option>
+                    <option value="Canada">🇨🇦 加拿大 (CAD)</option>
+                    <option value="China">🇨🇳 中国 (CNY)</option>
+                    <option value="Europe">🇪🇺 欧洲 (EUR)</option>
                 </select>
                 <button type="button" onclick="detectLocationAndSetCurrency()" style="padding:12px;background:#34C759;color:white;border:none;border-radius:8px;font-size:14px;" title="根据位置自动选择">📍</button>
             </div>
@@ -167,29 +169,50 @@
                     // 美国范围判断
                     const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
                     
-                    // 选择货币
-                    document.getElementById('currency').value = isUSA ? 'USA' : 'Canada';
-                    
-                    // 获取地名并显示
+                    // 获取地名并选择货币
                     fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`)
                         .then(response => response.json())
                         .then(data => {
                             let locationName = '';
+                            let currency = 'Canada'; // 默认
+                            
                             if (data.address) {
+                                // 获取地名
                                 if (data.address.landmark) locationName = data.address.landmark;
                                 else if (data.address.poi) locationName = data.address.poi;
                                 else if (data.address.road) locationName = data.address.road;
                                 else if (data.address.city) locationName = data.address.city;
                                 else if (data.address.town) locationName = data.address.town;
+                                else if (data.address.village) locationName = data.address.village;
                                 else locationName = data.display_name ? data.display_name.split(',').slice(0, 2).join(',') : '';
+                            
+                                // 根据所在国家选择货币
+                                const countryCode = data.address.country_code?.toUpperCase();
+                                
+                                if (countryCode === 'US' || isUSA) {
+                                    currency = 'USA';
+                                } else if (countryCode === 'CA') {
+                                    currency = 'Canada';
+                                } else if (countryCode === 'CN') {
+                                    currency = 'China';
+                                } else if (countryCode && ['DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'GR', 'IE', 'FI', 'SE', 'DK', 'PL', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SK', 'SI', 'EE', 'LV', 'LT', 'LU', 'CY', 'MT'].includes(countryCode)) {
+                                    currency = 'Europe';
+                                }
                             }
                             
-                            // 显示位置名称（可选，可以去掉这行）
+                            // 设置货币
+                            document.getElementById('currency').value = currency;
+                            
+                            // 显示位置名称（可选）
                             if (locationName && locationName.length > 2) {
-                                console.log('Current location:', locationName);
+                                console.log('Current location:', locationName, 'Currency:', currency);
                             }
                         })
-                        .catch(err => console.log('Geocoding error:', err));
+                        .catch(err => {
+                            // 如果获取地名失败，根据坐标简单判断
+                            document.getElementById('currency').value = isUSA ? 'USA' : 'Canada';
+                            console.log('Geocoding error:', err);
+                        });
                 },
                 (error) => {
                     console.log('Location error:', error.message);
@@ -342,14 +365,36 @@
             container.innerHTML = records.map(r => `
                 <div class="record">
                     <div class="record-info">
-                        <div class="record-date">${r.date} · ${r.currency === 'USA' ? '🇺🇸' : '🇨🇦'}${r.address ? ' 📍 ' + r.address : ''}</div>
+                        <div class="record-date">${r.date} · ${getCurrencyFlag(r.currency)} ${r.address ? ' 📍 ' + r.address : ''}</div>
                         <div class="record-category">${getCategoryIcon(r.category)} ${r.category}</div>
                         <div class="record-note">${r.note || ''}</div>
                     </div>
-                    <div class="record-amount ${r.currency}">${r.currency === 'USA' ? '$' : 'C$'}${r.amount.toFixed(2)}</div>
+                    <div class="record-amount ${r.currency}">${getCurrencySymbol(r.currency)}${r.amount.toFixed(2)}</div>
                     <button class="delete-btn" onclick="deleteRecord(${r.id})">Delete</button>
                 </div>
             `).join('');
+        }
+        
+        // 获取货币符号
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                'USA': '$',
+                'Canada': 'C$',
+                'China': '¥',
+                'Europe': '€'
+            };
+            return symbols[currency] || '$';
+        }
+        
+        // 获取货币旗帜
+        function getCurrencyFlag(currency) {
+            const flags = {
+                'USA': '🇺🇸',
+                'Canada': '🇨🇦',
+                'China': '🇨🇳',
+                'Europe': '🇪🇺'
+            };
+            return flags[currency] || '💰';
         }
         
         // 删除记录
@@ -379,13 +424,18 @@
             const byCountry = {};
             // 按分类汇总（转换为加元）
             const byCategory = {};
-            // 分别统计 CAD 和 USD
+            // 分别统计 CAD, USD, CNY, EUR
             let cadTotal = 0;
             let usdTotal = 0;
+            let cnyTotal = 0;
+            let eurTotal = 0;
+            // 汇率转换为 CAD
+            const rates = { 'USA': 1.35, 'Canada': 1, 'China': 0.19, 'Europe': 1.45 };
             let total = 0;
             
             records.forEach(r => {
-                const cadAmount = r.currency === 'USA' ? r.amount * 1.35 : r.amount;
+                const rate = rates[r.currency] || 1;
+                const cadAmount = r.amount * rate;
                 
                 // 原始货币统计
                 byCountry[r.currency] = (byCountry[r.currency] || 0) + r.amount;
@@ -396,8 +446,12 @@
                 // 分别统计
                 if (r.currency === 'Canada') {
                     cadTotal += r.amount;
-                } else {
+                } else if (r.currency === 'USA') {
                     usdTotal += r.amount;
+                } else if (r.currency === 'China') {
+                    cnyTotal += r.amount;
+                } else if (r.currency === 'Europe') {
+                    eurTotal += r.amount;
                 }
                 total += cadAmount;
             });
@@ -413,16 +467,18 @@
             
             // 货币分开显示
             html += '<div style="margin:15px 0 10px 0;border-top:1px solid #eee;padding-top:10px;"><strong>按货币:</strong></div>';
-            html += `<div class="summary-row"><span>🇨🇦 CAD</span><span>C$${cadTotal.toFixed(2)}</span></div>`;
-            html += `<div class="summary-row"><span>🇺🇸 USD</span><span>$${usdTotal.toFixed(2)}</span></div>`;
+            if (cadTotal > 0) html += `<div class="summary-row"><span>🇨🇦 CAD</span><span>C$${cadTotal.toFixed(2)}</span></div>`;
+            if (usdTotal > 0) html += `<div class="summary-row"><span>🇺🇸 USD</span><span>$${usdTotal.toFixed(2)}</span></div>`;
+            if (cnyTotal > 0) html += `<div class="summary-row"><span>🇨🇳 CNY</span><span>¥${cnyTotal.toFixed(2)}</span></div>`;
+            if (eurTotal > 0) html += `<div class="summary-row"><span>🇪🇺 EUR</span><span>€${eurTotal.toFixed(2)}</span></div>`;
             html += `<div class="summary-row" style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;"><span>💰 总计 (CAD)</span><span class="summary-total">C$${total.toFixed(2)}</span></div>`;
             html += '</div>';
             
             // By Country
             html += '<div class="summary"><h3>📊 By Country</h3>';
             for (const [country, amount] of Object.entries(byCountry)) {
-                const symbol = country === 'USA' ? '$' : 'C$';
-                const flag = country === 'USA' ? '🇺🇸' : '🇨🇦';
+                const symbol = getCurrencySymbol(country);
+                const flag = getCurrencyFlag(country);
                 html += `<div class="clickable" onclick="showCountryDetail('${country}')"><div class="summary-row"><span>${flag} ${country}</span><span>${symbol}${amount.toFixed(2)}</span></div></div>`;
             }
             html += '</div>';
@@ -446,6 +502,9 @@
                 return;
             }
             
+            // 汇率转换为 CAD
+            const rates = { 'USA': 1.35, 'Canada': 1, 'China': 0.19, 'Europe': 1.45 };
+            
             // 按月份汇总
             const monthlyData = {};
             
@@ -454,7 +513,8 @@
                 const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                 const monthName = `${d.getFullYear()}年${d.getMonth() + 1}月`;
                 
-                const cadAmount = r.currency === 'USA' ? r.amount * 1.35 : r.amount;
+                const rate = rates[r.currency] || 1;
+                const cadAmount = r.amount * rate;
                 
                 if (!monthlyData[key]) {
                     monthlyData[key] = { name: monthName, total: 0, count: 0 };
@@ -506,8 +566,8 @@
             const monthName = `${year}年${monthNames[month - 1]}`;
             
             let html = records.map(r => {
-                const symbol = r.currency === 'USA' ? '$' : 'C$';
-                const flag = r.currency === 'USA' ? '🇺🇸' : '🇨🇦';
+                const symbol = getCurrencySymbol(r.currency);
+                const flag = getCurrencyFlag(r.currency);
                 return `
                     <div class="detail-item">
                         <div>
@@ -539,7 +599,7 @@
                 return;
             }
             
-            const symbol = country === 'USA' ? '$' : 'C$';
+            const symbol = getCurrencySymbol(country);
             let html = records.map(r => `
                 <div class="detail-item">
                     <div>
@@ -550,7 +610,7 @@
                 </div>
             `).join('');
             
-            const countryFlag = country === 'USA' ? '🇺🇸' : '🇨🇦';
+            const countryFlag = getCurrencyFlag(country);
             document.getElementById('detailTitle').textContent = '📊 ' + countryFlag + ' ' + country;
             document.getElementById('detailBody').innerHTML = html;
             document.getElementById('detailModal').classList.add('active');
@@ -572,8 +632,8 @@
             }
             
             let html = records.map(r => {
-                const symbol = r.currency === 'USA' ? '$' : 'C$';
-                const flag = r.currency === 'USA' ? '🇺🇸' : '🇨🇦';
+                const symbol = getCurrencySymbol(r.currency);
+                const flag = getCurrencyFlag(r.currency);
                 return `
                     <div class="detail-item">
                         <div>
