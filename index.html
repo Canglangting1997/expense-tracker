@@ -166,15 +166,12 @@
                     const lon = position.coords.longitude;
                     const lat = position.coords.latitude;
                     
-                    // 美国范围判断
-                    const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
-                    
                     // 获取地名并选择货币
                     fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`)
                         .then(response => response.json())
                         .then(data => {
                             let locationName = '';
-                            let currency = 'Canada'; // 默认
+                            let currency = 'Canada'; // 默认为加拿大
                             
                             if (data.address) {
                                 // 获取地名
@@ -186,18 +183,26 @@
                                 else if (data.address.village) locationName = data.address.village;
                                 else locationName = data.display_name ? data.display_name.split(',').slice(0, 2).join(',') : '';
                             
-                                // 根据所在国家选择货币
+                                // 根据所在国家选择货币（优先使用 API 返回的国家代码）
                                 const countryCode = data.address.country_code?.toUpperCase();
                                 
-                                if (countryCode === 'US' || isUSA) {
-                                    currency = 'USA';
-                                } else if (countryCode === 'CA') {
+                                if (countryCode === 'CA') {
                                     currency = 'Canada';
+                                } else if (countryCode === 'US') {
+                                    currency = 'USA';
                                 } else if (countryCode === 'CN') {
                                     currency = 'China';
                                 } else if (countryCode && ['DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'GR', 'IE', 'FI', 'SE', 'DK', 'PL', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SK', 'SI', 'EE', 'LV', 'LT', 'LU', 'CY', 'MT'].includes(countryCode)) {
                                     currency = 'Europe';
+                                } else {
+                                    // 如果没有识别到国家，使用坐标简单判断
+                                    const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
+                                    currency = isUSA ? 'USA' : 'Canada';
                                 }
+                            } else {
+                                // 如果没有地址信息，使用坐标简单判断
+                                const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
+                                currency = isUSA ? 'USA' : 'Canada';
                             }
                             
                             // 设置货币
@@ -209,8 +214,11 @@
                             }
                         })
                         .catch(err => {
-                            // 如果获取地名失败，根据坐标简单判断
-                            document.getElementById('currency').value = isUSA ? 'USA' : 'Canada';
+                            // 如果获取地名失败，根据坐标简单判断（北美范围）
+                            const isUSA = lon >= -130 && lon <= -65 && lat >= 24 && lat <= 50;
+                            // 加拿大主要是经度 -140 到 -52，纬度 42 以北
+                            const isCanada = lon >= -140 && lon <= -52 && lat >= 42;
+                            document.getElementById('currency').value = isCanada ? 'Canada' : (isUSA ? 'USA' : 'Canada');
                             console.log('Geocoding error:', err);
                         });
                 },
